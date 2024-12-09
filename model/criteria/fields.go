@@ -1,9 +1,7 @@
 package criteria
 
 import (
-	"fmt"
 	"strings"
-	"time"
 
 	"github.com/navidrome/navidrome/log"
 )
@@ -17,6 +15,11 @@ var fieldMap = map[string]*mappedField{
 	"tracknumber":     {field: "media_file.track_number"},
 	"discnumber":      {field: "media_file.disc_number"},
 	"year":            {field: "media_file.year"},
+	"date":            {field: "media_file.date"},
+	"originalyear":    {field: "media_file.original_year"},
+	"originaldate":    {field: "media_file.original_date"},
+	"releaseyear":     {field: "media_file.release_year"},
+	"releasedate":     {field: "media_file.release_date"},
 	"size":            {field: "media_file.size"},
 	"compilation":     {field: "media_file.compilation"},
 	"dateadded":       {field: "media_file.created_at"},
@@ -37,13 +40,13 @@ var fieldMap = map[string]*mappedField{
 	"bitrate":         {field: "media_file.bit_rate"},
 	"bpm":             {field: "media_file.bpm"},
 	"channels":        {field: "media_file.channels"},
-	"genre":           {field: "genre.name"},
-	"loved":           {field: "annotation.starred"},
+	"genre":           {field: "COALESCE(genre.name, '')"},
+	"loved":           {field: "COALESCE(annotation.starred, false)"},
 	"dateloved":       {field: "annotation.starred_at"},
 	"lastplayed":      {field: "annotation.play_date"},
-	"playcount":       {field: "COALESCE(annotation.play_count, 0)", order: "annotation.play_count"},
-	"rating":          {field: "COALESCE(annotation.rating, 0)", order: "annotation.rating"},
-	"random":          {field: "-", order: "random()"},
+	"playcount":       {field: "COALESCE(annotation.play_count, 0)"},
+	"rating":          {field: "COALESCE(annotation.rating, 0)"},
+	"random":          {field: "", order: "random()"},
 }
 
 type mappedField struct {
@@ -54,19 +57,11 @@ type mappedField struct {
 func mapFields(expr map[string]interface{}) map[string]interface{} {
 	m := make(map[string]interface{})
 	for f, v := range expr {
-		if dbf := fieldMap[strings.ToLower(f)]; dbf != nil {
+		if dbf := fieldMap[strings.ToLower(f)]; dbf != nil && dbf.field != "" {
 			m[dbf.field] = v
 		} else {
 			log.Error("Invalid field in criteria", "field", f)
 		}
 	}
 	return m
-}
-
-type Time time.Time
-
-func (t Time) MarshalJSON() ([]byte, error) {
-	//do your serializing here
-	stamp := fmt.Sprintf("\"%s\"", time.Time(t).Format("2006-01-02"))
-	return []byte(stamp), nil
 }

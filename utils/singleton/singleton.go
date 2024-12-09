@@ -1,48 +1,44 @@
 package singleton
 
 import (
+	"fmt"
 	"reflect"
-	"strings"
+	"sync"
 
 	"github.com/navidrome/navidrome/log"
 )
 
 var (
-	instances    = make(map[string]interface{})
-	getOrCreateC = make(chan *entry, 1)
+	instances = make(map[string]any)
+	lock      sync.RWMutex
 )
 
-type entry struct {
-	constructor func() interface{}
-	object      interface{}
-	resultC     chan interface{}
-}
+// GetInstance returns an existing instance of object. If it is not yet created, calls `constructor`, stores the
+// result for future calls and returns it
+func GetInstance[T any](constructor func() T) T {
+	var v T
+	name := reflect.TypeOf(v).String()
 
-// Get returns an existing instance of object. If it is not yet created, calls `constructor`, stores the
-// result for future calls and return it
-func Get(object interface{}, constructor func() interface{}) interface{} {
-	e := &entry{
-		constructor: constructor,
-		object:      object,
-		resultC:     make(chan interface{}),
-	}
-	getOrCreateC <- e
-	return <-e.resultC
-}
-
-func init() {
-	go func() {
-		for {
-			e := <-getOrCreateC
-			name := reflect.TypeOf(e.object).String()
-			name = strings.TrimPrefix(name, "*")
-			v, created := instances[name]
-			if !created {
-				v = e.constructor()
-				log.Trace("Created new singleton", "object", name, "instance", v)
-				instances[name] = v
-			}
-			e.resultC <- v
-		}
+	v, available := func() (T, bool) {
+		lock.RLock()
+		defer lock.RUnlock()
+		v, available := instances[name].(T)
+		return v, available
 	}()
+
+	if available {
+		return v
+	}
+
+	lock.Lock()
+	defer lock.Unlock()
+	v, available = instances[name].(T)
+	if available {
+		return v
+	}
+
+	v = constructor()
+	log.Trace("Created new singleton", "type", name, "instance", fmt.Sprintf("%+v", v))
+	instances[name] = v
+	return v
 }

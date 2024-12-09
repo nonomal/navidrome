@@ -3,11 +3,13 @@ package listenbrainz
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/deluan/rest"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/navidrome/navidrome/conf"
 	"github.com/navidrome/navidrome/consts"
 	"github.com/navidrome/navidrome/core/agents"
 	"github.com/navidrome/navidrome/log"
@@ -26,7 +28,7 @@ type Router struct {
 	http.Handler
 	ds          model.DataStore
 	sessionKeys sessionKeysRepo
-	client      *Client
+	client      *client
 }
 
 func NewRouter(ds model.DataStore) *Router {
@@ -38,7 +40,7 @@ func NewRouter(ds model.DataStore) *Router {
 	hc := &http.Client{
 		Timeout: consts.DefaultHttpClientTimeOut,
 	}
-	r.client = NewClient(hc)
+	r.client = newClient(conf.Server.ListenBrainz.BaseURL, hc)
 	return r
 }
 
@@ -61,7 +63,7 @@ func (s *Router) getLinkStatus(w http.ResponseWriter, r *http.Request) {
 	resp := map[string]interface{}{}
 	u, _ := request.UserFrom(r.Context())
 	key, err := s.sessionKeys.Get(r.Context(), u.ID)
-	if err != nil && err != model.ErrNotFound {
+	if err != nil && !errors.Is(err, model.ErrNotFound) {
 		resp["error"] = err
 		resp["status"] = false
 		_ = rest.RespondWithJSON(w, http.StatusInternalServerError, resp)
@@ -87,7 +89,7 @@ func (s *Router) link(w http.ResponseWriter, r *http.Request) {
 	}
 
 	u, _ := request.UserFrom(r.Context())
-	resp, err := s.client.ValidateToken(r.Context(), payload.Token)
+	resp, err := s.client.validateToken(r.Context(), payload.Token)
 	if err != nil {
 		log.Error(r.Context(), "Could not validate ListenBrainz token", "userId", u.ID, "requestId", middleware.GetReqID(r.Context()), err)
 		_ = rest.RespondWithError(w, http.StatusInternalServerError, err.Error())
