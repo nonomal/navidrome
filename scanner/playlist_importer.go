@@ -5,22 +5,25 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/mattn/go-zglob"
 	"github.com/navidrome/navidrome/conf"
 	"github.com/navidrome/navidrome/core"
+	"github.com/navidrome/navidrome/core/artwork"
 	"github.com/navidrome/navidrome/log"
 	"github.com/navidrome/navidrome/model"
 )
 
 type playlistImporter struct {
-	ds         model.DataStore
-	pls        core.Playlists
-	rootFolder string
+	ds          model.DataStore
+	pls         core.Playlists
+	cacheWarmer artwork.CacheWarmer
+	rootFolder  string
 }
 
-func newPlaylistImporter(ds model.DataStore, playlists core.Playlists, rootFolder string) *playlistImporter {
-	return &playlistImporter{ds: ds, pls: playlists, rootFolder: rootFolder}
+func newPlaylistImporter(ds model.DataStore, playlists core.Playlists, cacheWarmer artwork.CacheWarmer, rootFolder string) *playlistImporter {
+	return &playlistImporter{ds: ds, pls: playlists, cacheWarmer: cacheWarmer, rootFolder: rootFolder}
 }
 
 func (s *playlistImporter) processPlaylists(ctx context.Context, dir string) int64 {
@@ -34,7 +37,11 @@ func (s *playlistImporter) processPlaylists(ctx context.Context, dir string) int
 		return count
 	}
 	for _, f := range files {
-		if !core.IsPlaylist(f.Name()) {
+		started := time.Now()
+		if strings.HasPrefix(f.Name(), ".") {
+			continue
+		}
+		if !model.IsValidPlaylist(f.Name()) {
 			continue
 		}
 		pls, err := s.pls.ImportFile(ctx, dir, f.Name())
@@ -42,10 +49,11 @@ func (s *playlistImporter) processPlaylists(ctx context.Context, dir string) int
 			continue
 		}
 		if pls.IsSmartPlaylist() {
-			log.Debug("Imported smart playlist", "name", pls.Name, "lastUpdated", pls.UpdatedAt, "path", pls.Path, "numTracks", pls.SongCount)
+			log.Debug("Imported smart playlist", "name", pls.Name, "lastUpdated", pls.UpdatedAt, "path", pls.Path, "elapsed", time.Since(started))
 		} else {
-			log.Debug("Imported playlist", "name", pls.Name, "lastUpdated", pls.UpdatedAt, "path", pls.Path, "numTracks", pls.SongCount)
+			log.Debug("Imported playlist", "name", pls.Name, "lastUpdated", pls.UpdatedAt, "path", pls.Path, "numTracks", len(pls.Tracks), "elapsed", time.Since(started))
 		}
+		s.cacheWarmer.PreCache(pls.CoverArtID())
 		count++
 	}
 	return count

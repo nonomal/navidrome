@@ -2,23 +2,23 @@ package persistence
 
 import (
 	"context"
+	"errors"
 
 	. "github.com/Masterminds/squirrel"
-	"github.com/astaxie/beego/orm"
 	"github.com/deluan/rest"
 	"github.com/navidrome/navidrome/model"
+	"github.com/pocketbase/dbx"
 )
 
 type transcodingRepository struct {
 	sqlRepository
-	sqlRestful
 }
 
-func NewTranscodingRepository(ctx context.Context, o orm.Ormer) model.TranscodingRepository {
+func NewTranscodingRepository(ctx context.Context, db dbx.Builder) model.TranscodingRepository {
 	r := &transcodingRepository{}
 	r.ctx = ctx
-	r.ormer = o
-	r.tableName = "transcoding"
+	r.db = db
+	r.registerModel(&model.Transcoding{}, nil)
 	return r
 }
 
@@ -46,7 +46,7 @@ func (r *transcodingRepository) Put(t *model.Transcoding) error {
 }
 
 func (r *transcodingRepository) Count(options ...rest.QueryOptions) (int64, error) {
-	return r.count(Select(), r.parseRestOptions(options...))
+	return r.count(Select(), r.parseRestOptions(r.ctx, options...))
 }
 
 func (r *transcodingRepository) Read(id string) (interface{}, error) {
@@ -54,7 +54,7 @@ func (r *transcodingRepository) Read(id string) (interface{}, error) {
 }
 
 func (r *transcodingRepository) ReadAll(options ...rest.QueryOptions) (interface{}, error) {
-	sel := r.newSelect(r.parseRestOptions(options...)).Columns("*")
+	sel := r.newSelect(r.parseRestOptions(r.ctx, options...)).Columns("*")
 	res := model.Transcodings{}
 	err := r.queryAll(sel, &res)
 	return res, err
@@ -71,7 +71,7 @@ func (r *transcodingRepository) NewInstance() interface{} {
 func (r *transcodingRepository) Save(entity interface{}) (string, error) {
 	t := entity.(*model.Transcoding)
 	id, err := r.put(t.ID, t)
-	if err == model.ErrNotFound {
+	if errors.Is(err, model.ErrNotFound) {
 		return "", rest.ErrNotFound
 	}
 	return id, err
@@ -81,7 +81,7 @@ func (r *transcodingRepository) Update(id string, entity interface{}, cols ...st
 	t := entity.(*model.Transcoding)
 	t.ID = id
 	_, err := r.put(id, t)
-	if err == model.ErrNotFound {
+	if errors.Is(err, model.ErrNotFound) {
 		return rest.ErrNotFound
 	}
 	return err
@@ -89,7 +89,7 @@ func (r *transcodingRepository) Update(id string, entity interface{}, cols ...st
 
 func (r *transcodingRepository) Delete(id string) error {
 	err := r.delete(Eq{"id": id})
-	if err == model.ErrNotFound {
+	if errors.Is(err, model.ErrNotFound) {
 		return rest.ErrNotFound
 	}
 	return err

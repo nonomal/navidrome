@@ -6,13 +6,13 @@ import (
 
 	"github.com/navidrome/navidrome/log"
 	"github.com/navidrome/navidrome/tests"
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 func TestDB(t *testing.T) {
 	tests.Init(t, false)
-	log.SetLevel(log.LevelCritical)
+	log.SetLevel(log.LevelFatal)
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "DB Suite")
 }
@@ -21,7 +21,7 @@ var _ = Describe("isSchemaEmpty", func() {
 	var db *sql.DB
 	BeforeEach(func() {
 		path := "file::memory:"
-		db, _ = sql.Open(Driver, path)
+		db, _ = sql.Open(Dialect, path)
 	})
 
 	It("returns false if the goose metadata table is found", func() {

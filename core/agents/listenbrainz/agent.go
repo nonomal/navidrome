@@ -2,6 +2,7 @@ package listenbrainz
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/navidrome/navidrome/conf"
@@ -10,7 +11,7 @@ import (
 	"github.com/navidrome/navidrome/core/scrobbler"
 	"github.com/navidrome/navidrome/log"
 	"github.com/navidrome/navidrome/model"
-	"github.com/navidrome/navidrome/utils"
+	"github.com/navidrome/navidrome/utils/cache"
 )
 
 const (
@@ -21,19 +22,21 @@ const (
 type listenBrainzAgent struct {
 	ds          model.DataStore
 	sessionKeys *agents.SessionKeys
-	client      *Client
+	baseURL     string
+	client      *client
 }
 
 func listenBrainzConstructor(ds model.DataStore) *listenBrainzAgent {
 	l := &listenBrainzAgent{
 		ds:          ds,
 		sessionKeys: &agents.SessionKeys{DataStore: ds, KeyName: sessionKeyProperty},
+		baseURL:     conf.Server.ListenBrainz.BaseURL,
 	}
 	hc := &http.Client{
 		Timeout: consts.DefaultHttpClientTimeOut,
 	}
-	chc := utils.NewCachedHTTPClient(hc, consts.DefaultHttpClientTimeOut)
-	l.client = NewClient(chc)
+	chc := cache.NewHTTPClient(hc, consts.DefaultHttpClientTimeOut)
+	l.client = newClient(l.baseURL, chc)
 	return l
 }
 
@@ -48,10 +51,13 @@ func (l *listenBrainzAgent) formatListen(track *model.MediaFile) listenInfo {
 			TrackName:   track.Title,
 			ReleaseName: track.Album,
 			AdditionalInfo: additionalInfo{
-				TrackNumber:  track.TrackNumber,
-				ArtistMbzIDs: []string{track.MbzArtistID},
-				TrackMbzID:   track.MbzTrackID,
-				ReleaseMbID:  track.MbzAlbumID,
+				SubmissionClient:        consts.AppName,
+				SubmissionClientVersion: consts.Version,
+				TrackNumber:             track.TrackNumber,
+				ArtistMbzIDs:            []string{track.MbzArtistID},
+				RecordingMbzID:          track.MbzRecordingID,
+				ReleaseMbID:             track.MbzAlbumID,
+				DurationMs:              int(track.Duration * 1000),
 			},
 		},
 	}
@@ -65,9 +71,9 @@ func (l *listenBrainzAgent) NowPlaying(ctx context.Context, userId string, track
 	}
 
 	li := l.formatListen(track)
-	err = l.client.UpdateNowPlaying(ctx, sk, li)
+	err = l.client.updateNowPlaying(ctx, sk, li)
 	if err != nil {
-		log.Warn(ctx, "ListenBrainz UpdateNowPlaying returned error", "track", track.Title, err)
+		log.Warn(ctx, "ListenBrainz updateNowPlaying returned error", "track", track.Title, err)
 		return scrobbler.ErrUnrecoverable
 	}
 	return nil
@@ -81,12 +87,13 @@ func (l *listenBrainzAgent) Scrobble(ctx context.Context, userId string, s scrob
 
 	li := l.formatListen(&s.MediaFile)
 	li.ListenedAt = int(s.TimeStamp.Unix())
-	err = l.client.Scrobble(ctx, sk, li)
+	err = l.client.scrobble(ctx, sk, li)
 
 	if err == nil {
 		return nil
 	}
-	lbErr, isListenBrainzError := err.(*listenBrainzError)
+	var lbErr *listenBrainzError
+	isListenBrainzError := errors.As(err, &lbErr)
 	if !isListenBrainzError {
 		log.Warn(ctx, "ListenBrainz Scrobble returned HTTP error", "track", s.Title, err)
 		return scrobbler.ErrRetryLater

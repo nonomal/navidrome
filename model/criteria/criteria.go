@@ -6,9 +6,8 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/navidrome/navidrome/log"
-
 	"github.com/Masterminds/squirrel"
+	"github.com/navidrome/navidrome/log"
 )
 
 type Expression = squirrel.Sqlizer
@@ -49,6 +48,21 @@ func (c Criteria) OrderBy() string {
 
 func (c Criteria) ToSql() (sql string, args []interface{}, err error) {
 	return c.Expression.ToSql()
+}
+
+func (c Criteria) ChildPlaylistIds() (ids []string) {
+	if c.Expression == nil {
+		return ids
+	}
+
+	switch rules := c.Expression.(type) {
+	case Any:
+		ids = rules.ChildPlaylistIds()
+	case All:
+		ids = rules.ChildPlaylistIds()
+	}
+
+	return ids
 }
 
 func (c Criteria) MarshalJSON() ([]byte, error) {

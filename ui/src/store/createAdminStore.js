@@ -1,10 +1,14 @@
-import { applyMiddleware, combineReducers, compose, createStore } from 'redux'
+import {
+  applyMiddleware,
+  combineReducers,
+  compose,
+  legacy_createStore as createStore,
+} from 'redux'
 import { routerMiddleware, connectRouter } from 'connected-react-router'
 import createSagaMiddleware from 'redux-saga'
 import { all, fork } from 'redux-saga/effects'
 import { adminReducer, adminSaga, USER_LOGOUT } from 'react-admin'
 import throttle from 'lodash.throttle'
-import pick from 'lodash.pick'
 import { loadState, saveState } from './persistState'
 
 const createAdminStore = ({
@@ -43,7 +47,9 @@ const createAdminStore = ({
   const store = createStore(
     resettableAppReducer,
     persistedState,
-    composeEnhancers(applyMiddleware(sagaMiddleware, routerMiddleware(history)))
+    composeEnhancers(
+      applyMiddleware(sagaMiddleware, routerMiddleware(history)),
+    ),
   )
 
   store.subscribe(
@@ -51,12 +57,16 @@ const createAdminStore = ({
       const state = store.getState()
       saveState({
         theme: state.theme,
-        player: pick(state.player, ['queue', 'volume', 'savedPlayIndex']),
+        player: (({ queue, volume, savedPlayIndex }) => ({
+          queue,
+          volume,
+          savedPlayIndex,
+        }))(state.player),
         albumView: state.albumView,
         settings: state.settings,
       })
     }),
-    1000
+    1000,
   )
 
   sagaMiddleware.run(saga)

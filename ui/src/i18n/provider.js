@@ -18,7 +18,7 @@ const defaultLocale = function () {
   return 'en'
 }
 
-function retrieveTranslation(locale) {
+export function retrieveTranslation(locale) {
   return dataProvider.getOne('translation', { id: locale }).then((res) => {
     localStorage.setItem('translation', JSON.stringify(res.data))
     return prepareLanguage(JSON.parse(res.data.data))
@@ -27,7 +27,10 @@ function retrieveTranslation(locale) {
 
 const removeEmpty = (obj) => {
   for (let k in obj) {
-    if (obj.hasOwnProperty(k) && typeof obj[k] === 'object') {
+    if (
+      Object.prototype.hasOwnProperty.call(obj, k) &&
+      typeof obj[k] === 'object'
+    ) {
       removeEmpty(obj[k])
     } else {
       if (!obj[k]) {
